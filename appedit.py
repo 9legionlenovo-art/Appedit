@@ -263,12 +263,13 @@ def escribir_fcpxml(ruta, nombre, planos, t0_mesa, mesa, tl_fps, ancho, alto, zo
         return assets[a["path"]][0]
 
     frame = 1 / Fraction(tl_fps)
-    spine = []
+    spine, zooms = [], []
     total = Fraction(0)
     for i, (desde, hasta, a, inicio, es_cam) in enumerate(planos):
         off = Fraction(round(Fraction(desde) / frame)) * frame
         fin = Fraction(round(Fraction(hasta) / frame)) * frame
         dur = fin - off
+        zooms.append(None)
         if dur <= 0:
             continue
         start = a["start"] + a_frames(inicio, a["fps"])
@@ -276,11 +277,13 @@ def escribir_fcpxml(ruta, nombre, planos, t0_mesa, mesa, tl_fps, ancho, alto, zo
         if es_cam:
             z = rng.choice(ZOOMS)
             if zoom_animado and rng.random() < 0.35:
+                zooms[-1] = "anim"
                 hijos += ('<adjust-transform><param name="scale"><keyframeAnimation>'
                           f'<keyframe time="{t(start)}" value="1 1"/>'
                           f'<keyframe time="{t(start + dur)}" value="1.25 1.25"/>'
                           '</keyframeAnimation></param></adjust-transform>')
             else:
+                zooms[-1] = z
                 hijos += f'<adjust-transform scale="{z} {z}"/>'
         if i == 0:
             # La música de la mesa va enganchada al primer plano, en una pista de audio debajo.
@@ -316,6 +319,30 @@ def escribir_fcpxml(ruta, nombre, planos, t0_mesa, mesa, tl_fps, ancho, alto, zo
            f'<sequence format="r0" duration="{t(total)}" tcStart="0s" tcFormat="NDF" audioLayout="stereo" audioRate="48k">'
            '<spine>\n' + "\n".join(spine) + '\n</spine></sequence></project></event></library>\n</fcpxml>\n')
     Path(ruta).write_text(xml, encoding="utf-8")
+    return zooms
+
+
+def render_previa(ruta, planos, zooms, t0_mesa, mesa, ancho=960, alto=540):
+    """Vídeo de baja calidad con los mismos cortes, para verlo sin abrir DaVinci."""
+    cmd, filtros = ["ffmpeg", "-v", "error", "-y"], []
+    for i, ((desde, hasta, a, inicio, _), z) in enumerate(zip(planos, zooms)):
+        dur = hasta - desde
+        cmd += ["-ss", f"{inicio:.3f}", "-t", f"{dur:.3f}", "-i", a["path"]]
+        f = f"[{i}:v]fps=25,scale={ancho}:{alto}:force_original_aspect_ratio=increase,crop={ancho}:{alto}"
+        if z == "anim":
+            f += (f",scale=w='trunc({ancho}*(1+0.25*t/{dur:.3f})/2)*2':h='trunc({alto}*(1+0.25*t/{dur:.3f})/2)*2'"
+                  f":eval=frame,crop={ancho}:{alto}")
+        elif z:
+            f += f",scale={round(ancho * z / 2) * 2}:{round(alto * z / 2) * 2},crop={ancho}:{alto}"
+        filtros.append(f + f",setsar=1,trim=duration={dur:.3f},setpts=PTS-STARTPTS[v{i}]")
+    n = len(planos)
+    total = planos[-1][1] - planos[0][0]
+    cmd += ["-ss", f"{t0_mesa:.3f}", "-t", f"{total:.3f}", "-i", mesa["path"]]
+    filtros.append("".join(f"[v{i}]" for i in range(n)) + f"concat=n={n}:v=1:a=0[v]")
+    cmd += ["-filter_complex", ";".join(filtros), "-map", "[v]", "-map", f"{n}:a",
+            "-c:v", "libx264", "-preset", "veryfast", "-crf", "28", "-pix_fmt", "yuv420p",
+            "-c:a", "aac", "-b:a", "160k", "-shortest", str(ruta)]
+    subprocess.run(cmd, check=True)
 
 
 # --------------------------------------------------------------- utilidades
@@ -387,6 +414,8 @@ def main():
     ap.add_argument("--fps", default="23.976", help="fps de la timeline (23.976, 24, 25, 30...)")
     ap.add_argument("--resolucion", default="1920x1080", help="resolución de la timeline")
     ap.add_argument("--semilla", type=int, help="fija el azar para repetir el mismo montaje")
+    ap.add_argument("--cache", help="archivo donde guardar la sincronización (por defecto, en la carpeta de salida)")
+    ap.add_argument("--previa", action="store_true", help="renderiza además un mp4 de baja calidad de cada pieza")
     args = ap.parse_args()
 
     rng = random.Random(args.semilla)
@@ -403,7 +432,7 @@ def main():
                 if p.suffix.lower() in VIDEO_EXT and not p.name.startswith(".")]
     if not recursos:
         sys.exit("No hay clips de vídeo en la carpeta de recursos.")
-    sincronizar(mesa, cams["cam1"] + cams["cam2"], salida / "sincronizacion.json")
+    sincronizar(mesa, cams["cam1"] + cams["cam2"], Path(args.cache) if args.cache else salida / "sincronizacion.json")
 
     print("Buscando momentos y beats...")
     rms = envolvente(mesa["path"])
@@ -455,9 +484,12 @@ def main():
 
         nombre = f"pieza_{n:02d}_{fmt_t(t0).replace(':', '-')[:7]}"
         info = {"nombre": nombre, "t0": t0, "bpm": bpm, "planos": plan, "recurso": rec["name"]}
-        escribir_fcpxml(salida / f"{nombre}.fcpxml", nombre, clips, t0, mesa,
+        zooms = escribir_fcpxml(salida / f"{nombre}.fcpxml", nombre, clips, t0, mesa,
                         tl_fps, ancho, alto, args.zoom_animado, rng)
         piezas.append(info)
+        if args.previa:
+            print(f"    renderizando vista previa de {nombre}...")
+            render_previa(salida / f"{nombre}_previa.mp4", clips, zooms, t0, mesa)
         print(f"  {nombre}: mesa {fmt_t(t0)}, {bpm:.1f} BPM, {len(plan)} planos, recurso {rec['name']}")
 
     escribir_resumen(salida / "resumen.html", piezas)

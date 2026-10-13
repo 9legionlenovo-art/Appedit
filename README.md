@@ -12,34 +12,38 @@ Qué hace:
 
 ## Instalación (Mac, una sola vez)
 
-Abre la app **Terminal** y pega:
+1. Abre la app **Terminal** (Cmd + Espacio, escribe "Terminal" y pulsa Enter).
+2. Pega esta línea y pulsa Enter:
 
-```bash
-# Homebrew (si no lo tienes): https://brew.sh
-brew install ffmpeg python
-pip3 install numpy
-```
+   ```bash
+   curl -fsSL https://raw.githubusercontent.com/9legionlenovo-art/appedit/claude/zen-franklin-hoyem1/instalar.sh | bash
+   ```
 
-Descarga este repositorio (botón verde **Code → Download ZIP** en GitHub) y descomprímelo, por ejemplo en `~/Appedit`.
+3. Si te pide la contraseña, es la del Mac (al escribirla no se ve nada; es normal).
+4. Tarda unos minutos. Al acabar aparece **Appedit.command** en el Escritorio.
 
 ## Uso
 
+1. Doble clic en **Appedit.command** del Escritorio.
+2. Te va pidiendo con ventanas: la grabación de la mesa, los vídeos de la cámara principal, los de la segunda cámara y la carpeta de clips de recurso. La siguiente vez te pregunta si usar los mismos.
+3. Le dices cuántas piezas y cuántos segundos, o en qué minutos del set empezar.
+4. Al terminar se abre una carpeta en el Escritorio con:
+   - `pieza_XX_previa.mp4`: el montaje en vídeo para verlo ya.
+   - `pieza_XX.fcpxml`: la timeline para DaVinci (**File → Import → Timeline…**).
+   - `resumen.html`: los cortes dibujados.
+
+La primera vez tarda más porque analiza el audio de todo el set. Las siguientes reutiliza la sincronización.
+
+### Desde la Terminal (avanzado)
+
 ```bash
-cd ~/Appedit
-python3 appedit.py \
+~/Appedit/.venv/bin/python ~/Appedit/appedit.py \
   --mesa "/Volumes/orico 1t/fernanda likas/261108_0068.wav" \
   --cam1 "/Volumes/orico 1t/fernanda likas/C5651.MP4" \
   --cam2 "/Volumes/orico 1t/fernanda likas/C5802.MP4" "/Volumes/orico 1t/fernanda likas/C5803.MP4" \
   --recursos "/Volumes/orico 1t/fernanda likas/clips" \
-  --piezas 6 --duracion 60 \
-  --salida ~/Desktop/appedit_salida
+  --piezas 6 --duracion 60 --previa --salida ~/Desktop/appedit_salida
 ```
-
-Consejo: en la Terminal puedes arrastrar un archivo o una carpeta desde Finder y se escribe su ruta sola.
-
-Después, en DaVinci: **File → Import → Timeline…** y elige cada `.fcpxml` de la carpeta de salida. Si DaVinci pregunta por los medios, deja que los busque en el disco.
-
-La primera vez tarda más porque analiza el audio de todo el set. La sincronización se guarda en `sincronizacion.json` dentro de la carpeta de salida y se reutiliza en las siguientes ejecuciones.
 
 ## Opciones
 
@@ -53,6 +57,7 @@ La primera vez tarda más porque analiza el audio de todo el set. La sincronizac
 | `--zoom-animado` | Parte de los planos de cámara con zoom animado de 1.0× a 1.25× |
 | `--fps 25` | fps de la timeline (por defecto 23.976, como en su proyecto) |
 | `--resolucion 1280x720` | Resolución de la timeline (por defecto 1920x1080) |
+| `--previa` | Renderiza también un mp4 de cada pieza para verlo sin DaVinci |
 | `--semilla 7` | Repetir exactamente el mismo montaje. Sin ella, cada ejecución sale distinta |
 
 ## Limitaciones de esta primera versión

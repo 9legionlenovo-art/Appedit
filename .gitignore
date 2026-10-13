@@ -2,3 +2,7 @@ __pycache__/
 *.pyc
 .DS_Store
 salida/
+.venv/
+ultima_vez.conf
+sincronizacion.json
+demo_montaje.mp4
